@@ -22,6 +22,8 @@ export interface ChatMessageData {
 export interface ChatSessionDocument extends MongooseDocument {
   sessionId: string;
   messages: ChatMessageData[];
+  ip: string;
+  title: string | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -37,12 +39,12 @@ export interface GraphState {
   question: string;
   chatHistory: string;
   context: string;
-  codeGeneration: string;
-  codeExplanation: string;
-  finalResponse: string;
+  generatedCode: string;  // Changed from codeGeneration
+  codeExplanationText: string;  // Changed from codeExplanation
+  finalResponseText: string;  // Changed from finalResponse
   sessionId: string;
-  language?: string;
-  framework?: string;
+  language: string;
+  framework: string;
 }
 
 // API related types

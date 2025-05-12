@@ -7,6 +7,7 @@ import { CodeRAG } from "../models/rag";
 import { ChatHistoryManager } from "../storage/chatHistory";
 import { GraphState } from "../types";
 import { config } from "../config";
+import { BaseMessageChunk } from "@langchain/core/messages";
 
 export class CodeGenerationGraph {
   private rag: CodeRAG;
@@ -38,9 +39,9 @@ export class CodeGenerationGraph {
         question: { value: null },
         chatHistory: { value: null },
         context: { value: null },
-        codeGeneration: { value: null },
-        codeExplanation: { value: null },
-        finalResponse: { value: null },
+        generatedCode: { value: null },  // Changed from codeGeneration
+        codeExplanationText: { value: null },  // Changed from codeExplanation
+        finalResponseText: { value: null },  // Changed from finalResponse
         sessionId: { value: null },
         language: { value: null },
         framework: { value: null }
@@ -83,7 +84,7 @@ export class CodeGenerationGraph {
           Provide only the code with appropriate comments:`
         ),
         this.llm,
-        (output) => ({ codeGeneration: output.content }),
+        (output) => ({ generatedCode: output.content }),  // Changed from codeGeneration
       ])
     );
 
@@ -92,7 +93,7 @@ export class CodeGenerationGraph {
       "explainCode",
       RunnableSequence.from([
         (state: GraphState) => ({
-          code: this.ensureString(state.codeGeneration),
+          code: this.ensureString(state.generatedCode),  // Changed from codeGeneration
           language: this.ensureString(state.language || "typescript"),
         }),
         PromptTemplate.fromTemplate(
@@ -101,7 +102,7 @@ export class CodeGenerationGraph {
           {code}`
         ),
         this.llm,
-        (output) => ({ codeExplanation: output.content }),
+        (output) => ({ codeExplanationText: output.content }),  // Changed from codeExplanation
       ])
     );
 
@@ -109,27 +110,26 @@ export class CodeGenerationGraph {
     this.graph.addNode("createResponse", async (state: GraphState) => {
       const language = this.ensureString(state.language || "typescript");
       const finalResponse = `
-## Generated ${language.toUpperCase()} Code ${
-        state.framework ? `(${this.ensureString(state.framework)})` : ""
-      }
+## Generated ${language.toUpperCase()} Code ${state.framework ? `(${this.ensureString(state.framework)})` : ""
+        }
 
 \`\`\`${language}
-${this.ensureString(state.codeGeneration)}
+${this.ensureString(state.generatedCode)}
 \`\`\`
 
 ## Explanation
 
-${this.ensureString(state.codeExplanation)}
+${this.ensureString(state.codeExplanationText)}
 `;
-      
+
       // Save assistant response to chat history
       await this.historyManager.addMessage(
         this.ensureString(state.sessionId),
         "assistant",
         finalResponse
       );
-      
-      return { finalResponse };
+
+      return { finalResponseText: finalResponse };  // Changed from finalResponse
     });
 
     // Define the graph edges
@@ -143,30 +143,41 @@ ${this.ensureString(state.codeExplanation)}
   }
 
   async run(
-    question: string, 
-    sessionId: string, 
-    language?: string, 
+    question: string,
+    sessionId: string,
+    language?: string,
     framework?: string
   ): Promise<string> {
     // Save user question to chat history
     await this.historyManager.addMessage(sessionId, "user", question);
-    
+
+    const titleCheck = await this.historyManager.getTitle(sessionId);
+    if (!titleCheck) {
+      const titleResponse = await this.llm.invoke(`summarize this text into 3-4 words title text:${question}`);
+      const titleString = typeof titleResponse === 'string'
+        ? titleResponse
+        : (titleResponse && typeof titleResponse === 'object' && 'content' in titleResponse)
+          ? String(titleResponse.content)
+          : `Session ${Date.now()}`;
+
+      await this.historyManager.setTitle(sessionId, titleString);
+    }
     // Get formatted chat history
     const chatHistory = await this.historyManager.formatChatHistory(sessionId);
-    
+
     // Run the graph
     const result = await this.graph.compile().invoke({
       question: this.ensureString(question),
       chatHistory: this.ensureString(chatHistory),
       context: "",
-      codeGeneration: "",
-      codeExplanation: "",
-      finalResponse: "",
+      generatedCode: "",  // Changed from codeGeneration
+      codeExplanationText: "",  // Changed from codeExplanation
+      finalResponseText: "",  // Changed from finalResponse
       sessionId: this.ensureString(sessionId),
       language: this.ensureString(language),
       framework: this.ensureString(framework),
     });
-    
-    return result.finalResponse;
+
+    return result.finalResponseText;  // Changed from finalResponse
   }
 }

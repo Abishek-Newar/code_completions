@@ -8,7 +8,8 @@ import { CodeTemplate } from "./models/mongoose/codeTemplate";
 import { config } from "./config";
 import { logger } from "./utils/logger";
 import { ApiResponse, CodeGenerationRequest } from "./types";
-
+import requestIp from "request-ip"
+import cors from "cors"
 async function main() {
   try {
     // Connect to MongoDB
@@ -17,7 +18,7 @@ async function main() {
 
     const app = express();
     app.use(express.json());
-
+    app.use(cors());
     // Initialize RAG system
     const codeRAG = new CodeRAG();
     await codeRAG.initialize();
@@ -40,7 +41,8 @@ async function main() {
     // API endpoints
     app.post("/api/sessions", async (req, res) => {
       try {
-        const sessionId = await historyManager.createSession();
+        const Ip = requestIp.getClientIp(req);
+        const sessionId = await historyManager.createSession(Ip);
         const response: ApiResponse<{ sessionId: string }> = {
           success: true,
           data: { sessionId },
@@ -55,6 +57,20 @@ async function main() {
         res.status(500).json(response);
       }
     });
+    app.get("/api/allsessions",async(req,res)=>{
+      try {
+        const ip = requestIp.getClientIp(req);
+        const allSessions = await historyManager.getAllSession(ip);
+        res.json(allSessions)
+      } catch (error) {
+        logger.error("Error while getting all sessions",error);
+        const response: ApiResponse<null> = {
+          success: false,
+          error: "Failed to get session",
+        };
+        res.status(500).json(response);
+      }
+    })
 
     app.post("/api/generate", async (req, res) => {
       try {

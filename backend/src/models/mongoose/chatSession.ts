@@ -30,6 +30,8 @@ const ChatSessionSchema = new Schema<ChatSessionDocument>(
       index: true,
     },
     messages: [ChatMessageSchema],
+    ip: String,
+    title: String
   },
   { timestamps: true }
 );
